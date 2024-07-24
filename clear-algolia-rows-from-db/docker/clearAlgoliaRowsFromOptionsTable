@@ -1,0 +1,26 @@
+#!/bin/bash
+
+########################
+# Clear the Algolia rows from the options table related to indexing for debugging purposes.
+########################
+
+#######################
+# SETUP
+#######################
+# MySQL Variables
+mysqlUser='dealer_inspire'
+mysqlPassword='awesome1234'
+mysqlDBName='dealerinspire_dev'
+mysqlPort='33306'
+mysqlHost='127.0.0.1'
+#######################
+# END SETUP
+#######################
+ 
+# Grab the WPDB Prefix
+prefix=$(echo "SELECT REPLACE(TABLE_NAME, 'options', '') AS prefix FROM information_schema.TABLES WHERE TABLE_NAME LIKE 'wp%_options%' LIMIT 1" | mysql -u $mysqlUser -p$mysqlPassword information_schema -h $mysqlHost -P $mysqlPort | sed -n 2p)
+options="options"
+
+# Clears the options
+mysql -u $mysqlUser -p$mysqlPassword $mysqlDBName -h $mysqlHost -P $mysqlPort -D $mysqlDBName -e \
+    "DELETE FROM $prefix$options WHERE option_name LIKE '%%algolia_%%'"

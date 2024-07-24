@@ -1,0 +1,15 @@
+#!/bin/bash
+# Enable or Disable xdebug
+
+XSHELL="/root/.bashrc"
+XSTATUS=$(cat "$XSHELL" | grep -c "XDEBUG_MODE")
+
+if [ $XSTATUS -eq 0 ]
+then
+    echo "export XDEBUG_MODE=off" >> $XSHELL
+    echo "Xdebug Disabled in the web container"
+else
+    sed -i '/export XDEBUG_MODE=off/d' $XSHELL
+    unset XDEBUG_MODE
+    echo "Xdebug Enabled in the web container"
+fi

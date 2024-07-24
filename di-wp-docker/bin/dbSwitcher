@@ -1,0 +1,47 @@
+#!/bin/bash
+
+################################################
+# THIS FILE IS NO LONGER MAINTAINED
+# PLEASE USE
+#  feature-dev-shared-scripts/devtools-cli
+################################################
+
+# Variables
+# $DI_WP_DOCKER should already be sourced from the docker directory's bin/.bashenv
+# $DI_WP_DIR should already be sourced from the docker directory's bin/.bashenv
+
+# Colors
+RED='\033[1;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;36m'
+NC='\033[0m'
+
+notify()
+{
+    printf "${YELLOW}${1}${NC}\n"
+}
+
+error()
+{
+    printf "${RED}${1}${NC}\n"
+}
+
+success()
+{
+    printf "${BLUE}${1}${NC}\n"
+}
+
+# using the extra file instead of passing the parameters on the command line supresses warnings about using a password on cli
+mysqlconnect="mysql --defaults-extra-file=$DI_WP_DOCKER/bin/.docker.sql.cnf"
+
+notify "Switching Databases"
+$mysqlconnect -D dealerinspire_dev < $1
+
+prefix=$(echo "SELECT REPLACE(TABLE_NAME, 'options', '') AS prefix FROM information_schema.TABLES WHERE TABLE_NAME LIKE 'wp%_options%' LIMIT 1" | $mysqlconnect -D information_schema | sed -n 2p)
+
+success $prefix
+notify "Update Prefix in wp-site-config.php"
+
+sed -i -e "s/define('TABLE_PREFIX','.*')\;/define('TABLE_PREFIX','$prefix');/g" "$DI_WP_DIR/wp-site-config.php"
+
+success "Updated Prefix to ${prefix} in wp-site-config.php"
