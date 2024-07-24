@@ -1,0 +1,48 @@
+version: '2'
+
+services:
+  web:
+    build: ./php
+    ports:
+      - "9081:80"
+      - "443:443"
+    volumes:
+      - {{DI_CORE}}:/var/www/:cached
+      - {{DI_WP_DOCKER}}:/var/tmp/:cached
+      - ./php/conf.d/docker-php-ext-opcache.ini:/usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
+      - ./php/conf.d/docker-php-ext-xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+    environment:
+        - REDIS_HOST=redis
+  
+  redis:
+    image: "redis:alpine"
+
+  db:
+    container_name: di_platform_db
+    platform: linux/x86_64
+    image: mysql:8.3
+    ports: 
+      - "33306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=dealer_inspire
+      - MYSQL_DATABASE=dealerinspire_dev
+      - MYSQL_USER=dealer_inspire
+      - MYSQL_PASSWORD=awesome1234
+    volumes:
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf:cached
+      - db_demo_dev:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -pdealer_inspire | grep 'mysqld is alive' || exit 1"]
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db_demo_dev:
+    name: db_demo_dev
+    labels:
+      - "com.di_platform_db.active=db_demo_dev"
+      - "com.di_platform_db.downloaded=db_demo_date"
+

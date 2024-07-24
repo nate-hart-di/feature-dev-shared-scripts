@@ -1,0 +1,237 @@
+#!/bin/bash
+
+SCRIPTPATH="$(dirname "$0")"
+
+# Variables
+source "$SCRIPTPATH/devtoolsscripts/env.sh"
+env_init
+
+# Use absolute path to .devtoolsrc
+if [ -f "$SCRIPTPATH/.devtoolsrc" ]; then
+    source "$SCRIPTPATH/.devtoolsrc"
+else
+    echo "File not found: $SCRIPTPATH/.devtoolsrc"
+    exit 1
+fi
+
+# Functions
+source "$SCRIPTPATH/colors.sh"
+source "$SCRIPTPATH/helpers.sh"
+source "$SCRIPTPATH/devtoolsscripts/docker.sh"
+source "$SCRIPTPATH/devtoolsscripts/hg.sh"
+source "$SCRIPTPATH/devtoolsscripts/db.sh"
+source "$SCRIPTPATH/devtoolsscripts/dash.sh"
+source "$SCRIPTPATH/devtoolsscripts/dealer.sh"
+source "$SCRIPTPATH/devtoolsscripts/state.sh"
+source "$SCRIPTPATH/devtoolsscripts/adbl.sh"
+source "$SCRIPTPATH/devtoolsscripts/search.sh"
+source "$SCRIPTPATH/devtoolsscripts/rebuild.sh"
+source "$SCRIPTPATH/devtoolsscripts/php.sh"
+source "$SCRIPTPATH/devtoolsscripts/ssh.sh"
+source "$SCRIPTPATH/devtoolsscripts/uccp.sh"
+source "$SCRIPTPATH/devtoolsscripts/gulp.sh"
+
+case $1 in
+    "dealer")
+        devtools_dealer "$@"
+        exit
+    ;;
+    "docker")
+        devtools_docker "$@"
+        exit
+    ;;
+    "hg")
+        devtools_hg "$@"
+        exit
+    ;;
+    "db")
+        devtools_db "$@"
+        exit
+    ;;
+    "dash")
+        devtools_dash "$@"
+        exit
+    ;;
+    "env")
+        devtools_env "$@"
+        exit
+    ;;
+    "state")
+        devtools_state "$@"
+        exit
+    ;;
+    "adbl")
+        devtools_adbl "$@"
+        exit
+    ;;
+    "search")
+        devtools_search "$@"
+        exit
+    ;;
+    "rebuild")
+        devtools_rebuild "$@"
+        exit
+    ;;
+    "php")
+        devtools_php "$@"
+        exit
+    ;;
+    "ssh")
+        devtools_ssh "$@"
+        exit
+    ;;
+    "uccp")
+        devtools_uccp "$@"
+        exit
+    ;;
+    "gulp")
+        devtools_gulp "$@"
+        exit
+    ;;
+esac
+
+devtools_usage() {
+    local usage="
+    Usage: devtools [OPTIONS] BRANCH | COMMAND
+    
+    Switch the dealertheme branch and database.
+    
+    NOTE: Calling a [COMMAND] will bypass the normal functionality of this
+    command and call a specific functionality. Each command has its own args,
+    and therefore, the BRANCH should be replaced with that COMMAND's args.
+    
+    Options:
+    -h        Show this help text
+    -p        Get the production DB
+    
+    Command:
+    uccp      Update Common, Core, Plugins (runs update-common-core-plugins.php)
+    search    Search for text in Name/Slug/URL.
+    dash      Query data from the Dealer Dashboard.
+    db        Manage database related items on your localhost.
+    gulp      Runs gulp in CommonTheme
+    rebuild   Rebuild individual websites and satis.
+    ssh       SSH into a pod.
+    docker    Run a docker helper script related to dev tools.
+    hg        Run a script related to dealer theme.
+    state     Manage the state of your DealerTheme.
+    env       Query or Set environment variables.
+    adbl      Manage your WP debuglog.
+    php       Switch local PHP versions. 
+    
+    Run 'devtools COMMAND -h' for more information on a command (if we have any).
+    
+"
+    printf "%s" "$usage" >&2
+}
+
+################################################
+#################### BEGIN #####################
+################################################
+PRODUCTION=false
+DOWNLOAD_DB=false
+
+# Parsing options
+while getopts ":hp" opt; do
+    case $opt in
+        h)
+            # User asked for help - echo USAGE and exit
+            devtools_usage
+            exit
+        ;;
+        p)
+            # Get the production db
+            PRODUCTION=true
+        ;;
+        *)
+            devtools_usage
+            exit 1
+        ;;
+    esac
+done
+
+shift $((OPTIND -1))
+OPTIND=1 # At this point, we should always be back at 1
+
+# Save the branch or command
+BRANCH="$1"
+COMMAND="$(basename "$BRANCH")"
+
+# If no branch or command was passed, echo USAGE and exit
+if [[ -z "$COMMAND" ]]; then devtools_usage && exit; fi
+
+# if branch includes a "." then we'll assume it's a domain
+# get the domain's slug, and override $1 value as slug
+if [[ $BRANCH == *\.* ]]; then
+    notify "Finding slug for domain: $BRANCH"
+    SLUG="$(dash_slug "$BRANCH")"
+    if [ $? -ne 0 ]; then printf "%s\n" "$SLUG"; exit 1; fi
+    info "Slug: $SLUG"
+    set -- "$SLUG"
+    BRANCH="$SLUG"
+fi
+
+# Checkout the branch
+hg_getdt "$@"
+
+# Determine volume name based on environment
+VOLUME_NAME="db_${BRANCH}_dev"
+if [ "$PRODUCTION" == true ]; then
+    VOLUME_NAME="db_${BRANCH}_prod"
+fi
+
+# Check if the volume already exists
+if docker volume inspect $VOLUME_NAME &>/dev/null; then
+    # Prompt user for choice if the volume exists
+    echo "Found an existing local database for $BRANCH:"
+    echo "Choose [U/d]: "
+    read -r user_choice
+
+    case $user_choice in
+        [Uu]*)
+            echo "Using existing local database"
+
+            echo "Stopping MySQL container"
+            docker stop mysql_container || echo "MySQL container not running"
+
+            echo "Removing existing MySQL container"
+            docker rm mysql_container || echo "MySQL container not found"
+
+            echo "Starting MySQL container with existing volume ${VOLUME_NAME}"
+            docker run -d --name mysql_container -v ${VOLUME_NAME}:/var/lib/mysql mysql:latest
+
+            # Ensure the active database state is updated
+            db_update_prefix "$@"
+            db_clean "$@"
+            db_user "$@"
+            ;;
+        [Dd]*)
+            echo "Downloading a new database backup"
+            DOWNLOAD_DB=true
+            ;;
+        *)
+            echo "Invalid choice"
+            exit 1
+            ;;
+    esac
+else
+    # No existing volume, download a new database backup
+    echo "No existing local database found. Downloading a new database backup."
+    DOWNLOAD_DB=true
+fi
+
+if [ "$DOWNLOAD_DB" == true ]; then
+    if [ "$ENVIRONMENT" == "docker" ]; then
+        docker_volume_check "$@"
+        docker_stop_db_container
+        docker_up
+        docker_mysql_health
+    fi
+
+    if [ "$PRODUCTION" == true ]; then db_getProd "$@"; else db_getDev "$@"; fi
+    db_import "$@"
+    db_user "$@"
+fi
+
+adbl_a "$@"
+success "Finished!"

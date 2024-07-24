@@ -1,0 +1,19 @@
+{
+  "name": "di-dealers",
+  "version": "1.0.0",
+  "description": "Open dealer inspire websites from terminal",
+  "main": "index.js",
+  "author": "Dealer Inspire - Features Team",
+  "license": "UNLICENSED",
+  "private": true,
+  "bin": {
+    "did": "./src/index.js"
+  },
+  "dependencies": {
+    "chalk": "^2.4.1",
+    "commander": "^2.19.0",
+    "minimist": "^1.2.0",
+    "node-fetch": "^2.2.0",
+    "tabtab": "^3.0.2"
+  }
+}

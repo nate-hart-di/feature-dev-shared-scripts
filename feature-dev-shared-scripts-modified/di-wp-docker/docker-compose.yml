@@ -1,0 +1,46 @@
+services:
+  web:
+    build: ./php
+    ports:
+      - "9081:80"
+      - "443:443"
+    volumes:
+      - /Users/nathanhart/code/dealerinspire/dealerinspire-core/:/var/www/:cached
+      - /Users/nathanhart/code/dealerinspire/feature-dev-shared-scripts/di-wp-docker/:/var/tmp/:cached
+      - ./php/conf.d/docker-php-ext-opcache.ini:/usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
+      - ./php/conf.d/docker-php-ext-xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+    environment:
+        - REDIS_HOST=redis
+  
+  redis:
+    image: "redis:alpine"
+
+  db:
+    container_name: di_platform_db
+    image: mysql:8.3
+    command: --default-authentication-plugin=mysql_native_password
+    platform: linux/arm64/v8
+    ports: 
+      - "33306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=dealer_inspire
+      - MYSQL_DATABASE=dealerinspire_dev
+      - MYSQL_USER=dealer_inspire
+      - MYSQL_PASSWORD=awesome1234
+    volumes:
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf:cached
+      - db_chevydemo_dev:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -pdealer_inspire | grep 'mysqld is alive' || exit 1"]
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db_chevydemo_dev:
+    name: db_chevydemo_dev
+    labels:
+      - "com.di_platform_db.active=db_chevydemo_dev"
+      - "com.di_platform_db.downloaded=Wed 07-24-2024 05:49:01PM"
